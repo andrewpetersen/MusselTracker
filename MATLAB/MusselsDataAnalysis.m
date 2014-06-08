@@ -7,15 +7,16 @@ fileName = 'B02-06-06-2014.m';
 fid = fopen(fileName);
 nRows = numel(textread(fileName,'%1c%*[^\n]'));
 fprintf('Opened file: %s \n',fileName);
+
 %Remove Resets - more thorough processing with timestamps to be added later
-dataNoReset = zeros(nRows,100);
+dataNoReset = zeros(nRows,maxLineLength);  %
 resetTimeStamps = zeros(1,100);
 k=1;
 p=1;
 for i=1:nRows
     line = fgetl(fid);
     if ~strcmp(line(1:6),'Mussel') %if there is not a reset line
-        trailingZeros = 100-length(line);
+        trailingZeros = maxLineLength              -length(line);
         padding = zeros(1,trailingZeros);
         for j=1:length(padding)
             padding(j) = ' ';
