@@ -26,9 +26,12 @@ int hall;         // Hall Effect voltage
 int Vcc = 0;      //source voltage
 int Vo = 0;       //voltage across thermistor
 
+int second;
+int minute;
 int hour;
 int day;
 int month;
+int year;
 
 
 //pin definitions
@@ -48,9 +51,6 @@ const int delayLength = 450; // delay in millisec
 // Initialize the RTC
 void startTime() {
 
-  // If you want to set the time and date, this is here to do it
-  
-  
   // This block puts 0x00 in the control register, starting the RTC
   // It also configures the RTC to output a 1Hz SQW
   // The date should be set before this code runs
@@ -65,7 +65,7 @@ void startTime() {
 // Get the time from the RTC
 void getTime() {
   
-  // Set RTC pointer back to 0
+  // Set RTC pointer back to 0 
   Wire.beginTransmission(0x68);                              
   Wire.write(byte(0x00));
   Wire.endTransmission(); 
@@ -80,8 +80,8 @@ void getTime() {
   }
   
   // calculate time (hour, day, month are global for use with file names)
-  int second = 10 * (currentTime[0] >> 4) + (currentTime[0] & 0b00001111); 
-  int minute = 10 * (currentTime[1] >> 4) + (currentTime[1] & 0b00001111);
+  second = 10 * (currentTime[0] >> 4) + (currentTime[0] & 0b00001111); 
+  minute = 10 * (currentTime[1] >> 4) + (currentTime[1] & 0b00001111);
   hour = 10 * (currentTime[2] >> 4) + (currentTime[2] & 0b00001111);
   day = 10 * (currentTime[4] >> 4) + (currentTime[4] & 0b00001111);
   month = 10 * (currentTime[5] >> 4) + (currentTime[5] & 0b00001111);
@@ -117,7 +117,7 @@ void collectData() {
   Vo = analogRead(pVo);            
   
   //  Read in IMU data (comment for testing without cables)
-  //lsm.read(); 
+  lsm.read(); 
   
   // Read in current time       
   getTime();       
@@ -138,18 +138,22 @@ void collectData() {
   // Set up file name and print data to file
   sprintf(fileName,"MT%2.2d%2.2d%2.2d.txt", month, day, hour);
   
-  File dataFile = SD.open(fileName, FILE_WRITE);
+  
+  File dataFile = SD.open(fileName, O_CREAT | O_APPEND | O_WRITE);
   
   if (dataFile) {
     dataFile.println(outputString);
-    dataFile.close();
+    
   }  
   // if the file isn't open, pop up an error:
   else {
     digitalWrite(errorLED, HIGH);
-    Serial.println("error opening datalog.txt");
+    Serial.println("error opening datalog!!!!.txt");
   }
   
+  dataFile.close();
+  
+  delay(5);
   
   // heartbeat/delay (needs to switch to sleep)           
   digitalWrite(heartbeatLED, LOW);
@@ -192,7 +196,7 @@ void enterSleep(void)
 // the setup routine runs once when you press reset
 void setup() {
   
-    // Heartbeat LED
+  // Heartbeat LED
   pinMode(heartbeatLED, OUTPUT);
   pinMode(errorLED, OUTPUT);
   pinMode(rtcInterrupt, INPUT);
@@ -210,7 +214,7 @@ void setup() {
   // Start IMU (this code will never ever run, stupid LSM library)
   if (!lsm.begin()) {
     Serial.println("Oops ... unable to initialize the LSM303. Check your wiring!");
-    digitalWrite(errorLED, HIGH);
+    digitalWrite(errorLED, LOW);
     while (1);
   }
   
@@ -220,13 +224,142 @@ void setup() {
   if (!SD.begin(chipSelect)) {
     Serial.println("Card failed, or not present");
     // don't do anything more:
-    digitalWrite(errorLED, HIGH);
+    digitalWrite(errorLED, LOW);
     return;
   }
   
   Serial.println("Initilization Success");
   
-  digitalWrite(errorLED, LOW);
+  
+  // Startup procedure block
+  // Plug in battery, Upload time via the SD file, head to ocean
+  // Attach sensors (no magnet), Press Reset #1, wait for red light to dim
+  // Attach Magnet, Press Reset, good to go
+  // On Failure to read SD, just go to main loop (mainly for debugging)
+  
+  if (SD.exists("ERRORLOG.TXT")) {
+    
+     if (!SD.exists("MAGNETLG.TXT")) {
+        
+            getTime();
+     
+     File dataFile = SD.open("MAGNETLG.TXT", O_CREAT | O_APPEND | O_WRITE);
+      
+     if (dataFile) {
+        dataFile.print("MAGNETLG at ");
+        dataFile.println(timeString);
+      }  
+      // if the file isn't open, pop up an error:
+     else {
+        digitalWrite(errorLED, LOW);
+        Serial.println("Error opening Errorlog! How ironic");
+     }
+      
+     dataFile.close();      
+
+        while(1) {
+          
+          hall = analogRead(hallPin);
+          if ( hall < 485 || hall > 560 ) {
+            digitalWrite(errorLED, HIGH);
+          } else {
+            digitalWrite(errorLED, LOW);
+          }
+          
+          delay(10);
+          
+          
+        }
+      
+     }
+    
+    
+    
+     getTime();
+     
+     File dataFile = SD.open("ERRORLOG.TXT", O_CREAT | O_APPEND | O_WRITE);
+      
+     if (dataFile) {
+        dataFile.print("Reset pressed at ");
+        dataFile.println(timeString);
+      }  
+      // if the file isn't open, pop up an error:
+     else {
+        digitalWrite(errorLED, LOW);
+        Serial.println("Error opening Errorlog! How ironic");
+     }
+      
+     dataFile.close();
+     
+  
+  } else {  
+    if (SD.exists("THETIME1.TXT")) {
+        
+       File dataFile = SD.open("THETIME1.TXT");
+        
+       if (dataFile) {
+          year = dataFile.parseInt();
+          month = dataFile.parseInt();
+          day = dataFile.parseInt();
+          hour = dataFile.parseInt();
+          minute = dataFile.parseInt();
+          second = dataFile.parseInt();
+       }  
+        // if the file isn't open, pop up an error:
+       else {
+          digitalWrite(errorLED, LOW);
+          Serial.println("error opening datalog!!!!.txt");
+       }
+        
+       dataFile.close();
+        
+        
+        
+        sprintf(timeString, "%2.2d/%2.2d %2.2d:%2.2d:%2.2d", 
+            month, day, hour, minute, second);
+            
+        Serial.println(timeString);
+        
+        delay(10);
+        
+        Wire.beginTransmission(0x68);                              
+        Wire.write(byte(0x00));
+  
+        Wire.write(byte( (second / 10) << 4 | (second % 10) ));
+        Wire.write(byte( (minute / 10) << 4 | (minute % 10) ));
+        Wire.write(byte( (hour / 10) << 4 | (hour % 10) ));
+        Wire.write(byte( 0x00 ));
+        Wire.write(byte( (day / 10) << 4 | (day % 10) ));
+        Wire.write(byte( (month / 10) << 4 | (month % 10) ));
+        Wire.write(byte( (year / 10) << 4 | (year % 10) ));
+                                
+        Wire.endTransmission(); 
+        
+        delay(10);
+        
+       dataFile = SD.open("ERRORLOG.TXT", O_CREAT | O_APPEND | O_WRITE);
+        
+       if (dataFile) {
+          dataFile.print("Unit started at ");
+          dataFile.println(timeString);
+        }  
+        // if the file isn't open, pop up an error:
+       else {
+          digitalWrite(errorLED, LOW);
+          Serial.println("Error opening Errorlog! How ironic");
+       }
+        
+       dataFile.close();
+      
+    } else {
+        Serial.println("No Start Time detected, halting");
+        while(1);
+    }
+    
+  }
+
+  
+   digitalWrite(errorLED, !digitalRead(errorLED));
   
 }
 
@@ -247,7 +380,6 @@ void loop() {
   //while( digitalRead(2)) {
   //    delay(1);
   //}
-
   
 }
 
