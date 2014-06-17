@@ -18,9 +18,13 @@ By Henry Jordan, Lenny Turcios, and Andrew Petersen
 Adafruit_LSM303 lsm;
   
 char outputString [100];
-char fileName [12];
+char fileName [13];
 char timeString [16];
 char currentTime[16];
+
+char timeFile[13] = "THETIME1.TXT";
+char magFile[13] = "MAGNETLG.TXT";
+char errFile[13] = "ERRORLOG.TXT";
 
 int hall;         // Hall Effect voltage
 int Vcc = 0;      //source voltage
@@ -65,7 +69,7 @@ void startTime() {
 // Get the time from the RTC
 void getTime() {
   
-  // Set RTC pointer back to 0 
+  // Set RTC pointer back to 0
   Wire.beginTransmission(0x68);                              
   Wire.write(byte(0x00));
   Wire.endTransmission(); 
@@ -85,10 +89,11 @@ void getTime() {
   hour = 10 * (currentTime[2] >> 4) + (currentTime[2] & 0b00001111);
   day = 10 * (currentTime[4] >> 4) + (currentTime[4] & 0b00001111);
   month = 10 * (currentTime[5] >> 4) + (currentTime[5] & 0b00001111);
+  year = 10 * (currentTime[6] >> 4) + (currentTime[6] & 0b00001111);
   
   // print time to timeString
-  sprintf(timeString, "%2.2d/%2.2d %2.2d:%2.2d:%2.2d", 
-     month, day, hour, minute, second);
+  sprintf(timeString, "%2.2d/%2.2d/%2.2d %2.2d:%2.2d:%2.2d", 
+     year, month, day, hour, minute, second);
   
 }
 
@@ -237,25 +242,10 @@ void setup() {
   // Attach Magnet, Press Reset, good to go
   // On Failure to read SD, just go to main loop (mainly for debugging)
   
-  if (SD.exists("ERRORLOG.TXT")) {
+  if (SD.exists(errFile)) {
     
-     if (!SD.exists("MAGNETLG.TXT")) {
-        
-            getTime();
-     
-     File dataFile = SD.open("MAGNETLG.TXT", O_CREAT | O_APPEND | O_WRITE);
-      
-     if (dataFile) {
-        dataFile.print("MAGNETLG at ");
-        dataFile.println(timeString);
-      }  
-      // if the file isn't open, pop up an error:
-     else {
-        digitalWrite(errorLED, LOW);
-        Serial.println("Error opening Errorlog! How ironic");
-     }
-      
-     dataFile.close();      
+     if (!SD.exists(magFile)) {  
+
 
         while(1) {
           
@@ -266,8 +256,39 @@ void setup() {
             digitalWrite(errorLED, LOW);
           }
           
-          delay(10);
+                    // Read in analog pins (Hall Effect and Thermistor)
+          hall = analogRead(hallPin);
+          Vcc = analogRead(pVcc);            
+          Vo = analogRead(pVo);            
           
+          //  Read in IMU data (comment for testing without cables)
+          lsm.read(); 
+          
+          // Read in current time       
+          getTime();       
+          
+       
+        
+          // Build final output string
+          sprintf(outputString, "%s\t%5d\t%5d\t%5d\t%5d\t%5d\t%5d\t%5d\t%5d\t%5d", 
+             timeString,
+             (int)lsm.accelData.x, (int)lsm.accelData.y, (int)lsm.accelData.z, 
+            (int)lsm.magData.x, (int)lsm.magData.y, (int)lsm.magData.z, Vcc, Vo,  hall);
+            
+            File dataFile = SD.open(magFile, O_CREAT | O_APPEND | O_WRITE);
+      
+           if (dataFile) {
+              dataFile.println(outputString);
+            }  
+            // if the file isn't open, pop up an error:
+           else {
+              digitalWrite(errorLED, LOW);
+              Serial.println("Error opening Magnet log!");
+           }
+            
+           dataFile.close();   
+                  
+          delay(5);
           
         }
       
@@ -277,7 +298,7 @@ void setup() {
     
      getTime();
      
-     File dataFile = SD.open("ERRORLOG.TXT", O_CREAT | O_APPEND | O_WRITE);
+     File dataFile = SD.open(errFile, O_CREAT | O_APPEND | O_WRITE);
       
      if (dataFile) {
         dataFile.print("Reset pressed at ");
@@ -293,9 +314,9 @@ void setup() {
      
   
   } else {  
-    if (SD.exists("THETIME1.TXT")) {
+    if (SD.exists(timeFile)) {
         
-       File dataFile = SD.open("THETIME1.TXT");
+       File dataFile = SD.open(timeFile);
         
        if (dataFile) {
           year = dataFile.parseInt();
@@ -308,7 +329,7 @@ void setup() {
         // if the file isn't open, pop up an error:
        else {
           digitalWrite(errorLED, LOW);
-          Serial.println("error opening datalog!!!!.txt");
+          Serial.println("error opening time file");
        }
         
        dataFile.close();
@@ -337,7 +358,7 @@ void setup() {
         
         delay(10);
         
-       dataFile = SD.open("ERRORLOG.TXT", O_CREAT | O_APPEND | O_WRITE);
+       dataFile = SD.open(errFile, O_CREAT | O_APPEND | O_WRITE);
         
        if (dataFile) {
           dataFile.print("Unit started at ");
