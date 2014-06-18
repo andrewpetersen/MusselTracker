@@ -86,64 +86,29 @@ fid = fopen(dataToProcessFileName);
 if fid == -1
     error('Failed to opened file: %s \n',dataToProcessFileName);
 end
-nFileLines = numel(textread(dataToProcessFileName,'%1c%*[^\n]'));
+numberOfRows = numel(textread(dataToProcessFileName,'%1c%*[^\n]'));
 fclose(fid);
 fid = fopen(dataToProcessFileName);
 fprintf('Opened file: %s \n',dataToProcessFileName);
-error('work in progress')
-%Remove Resets - more thorough processing with timestamps to be added later
-maxLineLength = 400;
-dataNoReset = zeros(nFileLines,maxLineLength);  %
-resetTimeStamps = zeros(1,100);
-k=1;
-p=1;
-for i=1:nFileLines
-    line = fgetl(fid);
-    if ~strcmp(line(1:6),'Mussel') %if there is not a reset line
-        trailingZeros = maxLineLength-length(line);
-        padding = zeros(1,trailingZeros);
-        for j=1:length(padding)
-            padding(j) = ' ';
-        end
-        try 
-            dataNoReset(k,:) = [line, padding];
-        catch
-            warning('Removing Resets Failed')
-            i
-            k
-            trailingZeros
-            padding
-            line
-        end
-        k=k+1;
-    else
-        resetTimeStamps(p) = 1;
-        
-        p=p+1;
-    end
-end
-numberOfResets = nFileLines - k + 1;
-%Separate and Parse lines from file into timestamps and data
-numberOfRows = nFileLines - numberOfResets;
-timestamps = zeros(numberOfRows,14);
+timestampLength = length('14/06/17 14:00:01');
+timestamps = zeros(numberOfRows,timestampLength);
 musselData = zeros(numberOfRows,9);
 for i=1:numberOfRows
-    timestamps(i,:) = dataNoReset(i,1:14);
+    line = fgetl(fid);
     try
-        musselData(i,:) = str2num(char(dataNoReset(i,15:end)));
+        timestamps(i,:) = line(1:timestampLength);
+        musselData(i,:) = str2num(char(line(timestampLength+1:end)));
     catch
-        warning('str2num failed')
-        i
-        stringThing = char(dataNoReset(i,15:end))
-        errorThing = str2num(char(dataNoReset(i,15:end)))
+        warning('Reading Line %d failed',i)
+        line
     end
 end
 % musselData = fscanf(fid,'%*s%*s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d',[8,nRows]);
 fclose(fid);
+fprintf('Finished reading data from %s \n',dataToProcessFileName);
+
 x_axis = 1:length(musselData);
 
-disp('Done reading.')
-%error('Stop Point')%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 imuMatrix = musselData(:,1:6);
 thermistorResistanceData = musselData(:,7:8);
 hallEffectData = musselData(:,9);
