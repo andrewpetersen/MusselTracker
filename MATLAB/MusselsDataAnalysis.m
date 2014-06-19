@@ -5,6 +5,7 @@ format compact
 
 disp('Started')
 
+%%%%Check for Files
 %Finding Necessary Files
 workingDirectory = 'C:\EE Monterey 2014\Working Directory\';
 processedFolder = 'C:\EE Monterey 2014\ProcessedData\';
@@ -14,7 +15,6 @@ files = dir(workingDirectory);
 [countERR,fileErrorLogName] = checkForFile(files,'ERRORLOG.TXT',false);
 [countMAG,fileMagnetLogName] = checkForFile(files,'MAGNETLG.TXT',false);
 [countDATA,fileMusselName] = checkForFile(files,'MT',true);
-
 
 %Get Data File Names
 dataFileNames = zeros(countDATA,length('MTXXXXXX.TXT'));
@@ -26,6 +26,9 @@ for i=1:length(files)
     end
 end
 
+
+
+%%%Get Information from files (not data files)
 %Get Rk and Rt@25 from SDXX.TXT file
 fid = fopen(strcat(workingDirectory,fileSDName));
 if fid == -1
@@ -107,11 +110,14 @@ catch
     error('Last line of last data file does not have a timestamp.')
 end
 
-%Create folder for processed data
-%processedFolder
 dateSDNum = strcat(dateCollected,'-',fileSDName(1:4));
 concatFileName = strcat(dateSDNum,'.m');
 subFolder = strcat(processedFolder,dateSDNum,'\');
+
+
+%%%%Make folder for processed Data, Concat data, save concatted data
+%Create folder for processed data
+%processedFolder
 checkFiles = dir(subFolder);
 if ~isempty(checkFiles)
     error('Folder %s already exists',subFolder)
@@ -123,7 +129,7 @@ fprintf('Created folder %s\n',subFolder)
 
 %Create concatenated data file
 concatFid = fopen(strcat(subFolder,concatFileName),'w');
-%%%%check if file already exists/has data in it
+%(not implemented) check if file already exists/has data in it
 if concatFid == -1
     error('Failed to create file %s in %s', concatFileName,subFolder)
 end
@@ -149,6 +155,8 @@ end
 fclose(concatFid);
 fprintf('Finished writing concatenated data\n')
 
+
+%%%%%Read and Parse Data
 %Read and Parse Data into Matlab
 dataToProcessFileName = strcat(subFolder,concatFileName);
 fid = fopen(dataToProcessFileName);
@@ -159,6 +167,7 @@ numberOfRows = numel(textread(dataToProcessFileName,'%1c%*[^\n]')); %count the n
 fclose(fid);
 fid = fopen(dataToProcessFileName);
 fprintf('Opened file: %s \n',dataToProcessFileName);
+timestampLength = 17; %'14/06/19 11:36:42'
 timestamps = zeros(numberOfRows,timestampLength);
 musselData = zeros(numberOfRows,9);
 for i=1:numberOfRows
@@ -175,6 +184,8 @@ fclose(fid);
 fprintf('Finished reading data from %s \n',concatFileName); %dataToProcessFileName);
 
 
+
+%%%%Calculations 
 %Separate data into parts
 imuMatrix = musselData(:,1:6);
 thermistorResistanceData = musselData(:,7:8);
@@ -204,9 +215,15 @@ disp('Hall effect calculations finished')
 
 %IMU Calcs
 %%%%Calculating magnet offset for IMU
+magOffset = mean(magnetLogData(end-60:end,4:6),1) - mean(magnetLogData(1:60,4:6),1); %this has not been tested
+for i=1:length(imuMatrix(:,1))
+    imuMatrix(i,4:6) = imuMatrix(i,4:6) - magOffset;
+end
 %%%%Calculating shift offset - make matrix to be inputted into other
 %%%%program
 
+
+%%%%%Plotting
 %Convert Timestamps to proper format for datenum and datetick
 fprintf('Started converting timestamps\n')
 timeTicks = zeros(length(timestamps(:,1)),21);
