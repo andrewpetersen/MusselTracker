@@ -1,4 +1,5 @@
 clear
+format compact
 %clc, close all
 %Mussel Data Analysis
 
@@ -12,6 +13,7 @@ files = dir(workingDirectory);
 [countMAG,fileMagnetLogName] = checkForFile(files,'MAGNETLG.TXT',false);
 [countDATA,fileMusselName] = checkForFile(files,'MT',true);
 
+
 %Get Data File Names
 dataFileNames = zeros(countDATA,length('MTXXXXXX.TXT'));
 k=1;
@@ -21,17 +23,20 @@ for i=1:length(files)
         k=k+1;
     end
 end
+
 %Get date of collection from last timestamp
-fid = fopen(strcat('WorkingRawSD\' , dataFileNames(end,:)));
+fid = fopen(strcat(workingDirectory , dataFileNames(end,:))); %open last data file
 while ~feof(fid)
-  line = fgetl(fid);
+  line = fgetl(fid);        %get last line of data file
 end
 fclose(fid);
-try 
+try                         
+    %verify that date is in correct format:
+    %14/06/17 14:01:15
     numbers = [line(1:2),line(4:5),line(7:8)];
     slashes = [line(3),line(6)];
     slashesGood = strcmp(slashes,'//');
-    isNotDigit = sum((numbers<48) + (numbers>57));
+    isNotDigit = sum((numbers<48) + (numbers>57));%will be zero if characters are digits (ASCII characters)
     if slashesGood && isNotDigit==0
         dateCollected = strcat(line(1:2),'-',line(4:5),'-',line(7:8));
         fprintf('Date SD card collected (YY-MM-DD): %s\n',dateCollected)
@@ -42,7 +47,7 @@ catch
     error('Last line of last data file does not have a timestamp.')
 end
 
-%Create file for concatenated data
+%Create folder for processed data
 processedFolder = 'C:\Users\Student\Documents\EE Monterey 2014 MATLAB\ProcessedData\';
 dateSDNum = strcat(dateCollected,'-',fileSDName(1:4));
 concatFileName = strcat(dateSDNum,'.m');
@@ -55,11 +60,15 @@ if mkdir(subFolder) ~=1
     error('Folder %s could not be created',subFolder)
 end
 fprintf('Created folder %s\n',subFolder)
+
+%Create concatenated data file
 concatFid = fopen(strcat(subFolder,concatFileName),'w');
+%%%%check if file already exists/has data in it
 if concatFid == -1
     error('Failed to create file %s in %s', concatFileName,subFolder)
 end
 fprintf('Created file %s\n',concatFileName)
+
 %Concatenate data from each file and write to new file
 for i=1:length(dataFileNames(:,1))
     dataFile = strcat(workingDirectory,(dataFileNames(i,:)));
@@ -80,13 +89,13 @@ end
 fclose(concatFid);
 fprintf('Finished writing concatenated data\n')
 
-%Input Data into Matlab
+%Input/Parse Data into Matlab
 dataToProcessFileName = strcat(subFolder,concatFileName);
 fid = fopen(dataToProcessFileName);
 if fid == -1
     error('Failed to opened file: %s \n',dataToProcessFileName);
 end
-numberOfRows = numel(textread(dataToProcessFileName,'%1c%*[^\n]'));
+numberOfRows = numel(textread(dataToProcessFileName,'%1c%*[^\n]')); %count the number of lines in the file
 fclose(fid);
 fid = fopen(dataToProcessFileName);
 fprintf('Opened file: %s \n',dataToProcessFileName);
@@ -103,9 +112,8 @@ for i=1:numberOfRows
         line
     end
 end
-% musselData = fscanf(fid,'%*s%*s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d',[8,nRows]);
 fclose(fid);
-fprintf('Finished reading data from %s \n',dataToProcessFileName);
+fprintf('Finished reading data from %s \n',concatFileName); %dataToProcessFileName);
 
 %Get Rk and Rt@25 from SDXX.TXT file
 fid = fopen(strcat(workingDirectory,fileSDName));
@@ -127,6 +135,7 @@ Rk = str2num(char(RkFromFile(3:end)));
 fprintf('Rt@25 = %d   (at 25 degrees Celsius)\n',Rt);
 fprintf('Rk    = %d   (known resistance)\n',Rk);
 
+%Separate data into parts
 imuMatrix = musselData(:,1:6);
 thermistorResistanceData = musselData(:,7:8);
 hallEffectData = musselData(:,9);
@@ -163,7 +172,7 @@ x_axis = datenum(datevec(char(timeTicks)));
 
 disp('Plotting')
 fHandle = figure('units','normalized','outerposition',[0.1 0.1 0.9 0.9]);%makes figure fullscreen (not 'Maximized')
-set(fHandle, 'color', [1 1 1])
+%set(fHandle, 'color', [1 1 1])
 subplot(3,1,1)
 hold on
 plot(x_axis, thermistorTemp,'o','MarkerSize',1)
@@ -187,7 +196,7 @@ for i=4:6
     plot(x_axis,imuMatrix(:,i),'bo','MarkerSize',1)
 end
 
-%Getting Timestamps of Resets
+%Getting Timestamps of Resets, Format: 'Reset pressed at 14/06/17 13:40:54'
 fid = fopen([workingDirectory,fileErrorLogName]);
 if fid == -1
     warning('Could not open %s',fileErrorLogName)
@@ -199,7 +208,6 @@ while ~feof(fid)
 end
 fclose(fid);
 
-%'Reset pressed at 14/06/17 13:40:54'
 for i=1:length(resets(:,1))
     time = [resets(i,18:end),'.000'];%this code could be better, resets might be off by 0.5 seconds
     xtime = datenum(datevec(char(time)));
