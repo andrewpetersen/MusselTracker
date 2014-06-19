@@ -24,6 +24,64 @@ for i=1:length(files)
     end
 end
 
+%Get Rk and Rt@25 from SDXX.TXT file
+fid = fopen(strcat(workingDirectory,fileSDName));
+if fid == -1
+    error('Could not open %s',fileSDName)
+end
+fgetl(fid); %skip first line
+RtFromFile = fgetl(fid);
+RkFromFile = fgetl(fid);
+fclose(fid);
+if ~((length(RtFromFile)>2 && strcmp(RtFromFile(1:2),'Rt')) && length(RkFromFile)>2 && strcmp(RkFromFile(1:2),'Rk'))
+    warning('SDXX file in wrong format.')
+    fprintf('Proper format is: \nSDXX\nRt xxxxx\nRk xxxxx\n')
+    error('SDXX file in wrong format')
+end    
+Rt = str2num(char(RtFromFile(3:end)));
+Rk = str2num(char(RkFromFile(3:end)));
+
+fprintf('Rt@25 = %d   (at 25 degrees Celsius)\n',Rt);
+fprintf('Rk    = %d   (known resistance)\n',Rk);
+
+%Getting Timestamps of Resets, 
+fid = fopen([workingDirectory,fileErrorLogName]);
+if fid == -1
+    warning('Could not open %s',fileErrorLogName)
+end
+fgetl(fid); %ignore start time 
+resets = [];
+while ~feof(fid)
+    resets = [resets; fgetl(fid)];
+end
+fclose(fid);
+
+%Get Calibration data from MAGNETLG.TXT
+fid = fopen([workingDirectory,fileMagnetLogName]);
+if fid == -1
+    error('Could not open %s',fileMagnetLogName)
+end
+magLogDataLength = 0;
+while ~feof(fid)  %count the number of lines
+    line = fgetl(fid);
+    magLogDataLength = magLogDataLength + 1;
+end
+magLogDataLength = magLogDataLength - 2; %ignore last two lines of file
+fclose(fid);
+magnetLogData = zeros(magLogDataLength,9);
+fid = fopen([workingDirectory,fileMagnetLogName]);
+timestampLength = length('14/06/17 14:00:01');
+for i=1:magLogDataLength
+    line = fgetl(fid);
+    try
+        magnetLogData(i,:) = str2num(char(line(timestampLength+1:end)));
+    catch
+        error('Reading Line %d of %s failed',i,fileMagnetLogName)
+        line
+    end
+end
+fclose(fid);
+
 %Get date of collection from last timestamp
 fid = fopen(strcat(workingDirectory , dataFileNames(end,:))); %open last data file
 while ~feof(fid)
@@ -89,7 +147,7 @@ end
 fclose(concatFid);
 fprintf('Finished writing concatenated data\n')
 
-%Input/Parse Data into Matlab
+%Read and Parse Data into Matlab
 dataToProcessFileName = strcat(subFolder,concatFileName);
 fid = fopen(dataToProcessFileName);
 if fid == -1
@@ -99,7 +157,6 @@ numberOfRows = numel(textread(dataToProcessFileName,'%1c%*[^\n]')); %count the n
 fclose(fid);
 fid = fopen(dataToProcessFileName);
 fprintf('Opened file: %s \n',dataToProcessFileName);
-timestampLength = length('14/06/17 14:00:01');
 timestamps = zeros(numberOfRows,timestampLength);
 musselData = zeros(numberOfRows,9);
 for i=1:numberOfRows
@@ -115,25 +172,6 @@ end
 fclose(fid);
 fprintf('Finished reading data from %s \n',concatFileName); %dataToProcessFileName);
 
-%Get Rk and Rt@25 from SDXX.TXT file
-fid = fopen(strcat(workingDirectory,fileSDName));
-if fid == -1
-    error('Could not open %s',fileSDName)
-end
-fgetl(fid); %skip first line
-RtFromFile = fgetl(fid);
-RkFromFile = fgetl(fid);
-fclose(fid);
-if ~((length(RtFromFile)>2 && strcmp(RtFromFile(1:2),'Rt')) && length(RkFromFile)>2 && strcmp(RkFromFile(1:2),'Rk'))
-    warning('SDXX file in wrong format.')
-    fprintf('Proper format is: \nSDXX\nRt xxxxx\nRk xxxxx\n')
-    error('SDXX file in wrong format')
-end    
-Rt = str2num(char(RtFromFile(3:end)));
-Rk = str2num(char(RkFromFile(3:end)));
-
-fprintf('Rt@25 = %d   (at 25 degrees Celsius)\n',Rt);
-fprintf('Rk    = %d   (known resistance)\n',Rk);
 
 %Separate data into parts
 imuMatrix = musselData(:,1:6);
@@ -149,16 +187,21 @@ disp('Thermistor calculations finished')
 
 %Calculating Distance from Hall Effect Sensor
 disp('Hall effect calculations started')
-hallEffectDistance = hallVoltsToDist(hallEffectData);
+zeroPoint = mean(magnetLogData(end-60:end,9));
+hallEffectDistance = hallVoltsToDist(hallEffectData,zeroPoint);
 disp('Hall effect calculations finished')
 
-%Convert Timestamps to format for datenum and datetick
+%IMU Calcs
+%%%%Calculating magnet offset for IMU
+%%%%Calculating shift offset - make matrix to be inputted into other
+%%%%program
+
+%Convert Timestamps to proper format for datenum and datetick
 timeTicks = zeros(length(timestamps(:,1)),21);
 timeTicks(:,1:17) = timestamps;
 for i=1:length(timeTicks(:,1))
     timeTicks(i,18:21) = '.000';
 end
-
 a = timeTicks(1,:);
 for i=2:length(timeTicks(:,1))
     b = timeTicks(i,:);
@@ -173,18 +216,21 @@ x_axis = datenum(datevec(char(timeTicks)));
 disp('Plotting')
 fHandle = figure('units','normalized','outerposition',[0.1 0.1 0.9 0.9]);%makes figure fullscreen (not 'Maximized')
 %set(fHandle, 'color', [1 1 1])
+%Plotting Thermistor, temperature data
 subplot(3,1,1)
 hold on
 plot(x_axis, thermistorTemp,'o','MarkerSize',1)
 title('Thermistor','FontWeight','bold','FontSize',15);ylabel('Temperature, C');
 axis([-inf, inf, 5, 45])
 
+%Plotting Hall Effect, Gape data
 subplot(3,1,2)
 hold on;
 plot(x_axis, hallEffectDistance,'ro','MarkerSize',1)
 title('Hall Effect','FontWeight','bold','FontSize',15);ylabel('Gape, mm');
 axis([-inf, inf, -1,6])
 
+%Plotting IMU, orientation data
 subplot(3,1,3)
 hold on
 title('IMU Data: Red-Acc, Blue-Mag','FontWeight','bold','FontSize',15);xlabel(['Timestamps, Date: ',dateCollected(1:5)]);
@@ -196,18 +242,7 @@ for i=4:6
     plot(x_axis,imuMatrix(:,i),'bo','MarkerSize',1)
 end
 
-%Getting Timestamps of Resets, Format: 'Reset pressed at 14/06/17 13:40:54'
-fid = fopen([workingDirectory,fileErrorLogName]);
-if fid == -1
-    warning('Could not open %s',fileErrorLogName)
-end
-fgetl(fid); %ignore start time 
-resets = [];
-while ~feof(fid)
-    resets = [resets; fgetl(fid)];
-end
-fclose(fid);
-
+%Plotting Resets, Format from file: 'Reset pressed at 14/06/17 13:40:54'
 for i=1:length(resets(:,1))
     time = [resets(i,18:end),'.000'];%this code could be better, resets might be off by 0.5 seconds
     xtime = datenum(datevec(char(time)));
@@ -228,7 +263,6 @@ subplot(3,1,2)
 datetickzoom('x','HH:MM:SS.FFF')
 subplot(3,1,3)
 datetickzoom('x','HH:MM:SS.FFF')
-
 
 %Save the plot alongside the concatenated data file
 savefig(fHandle,[subFolder,dateSDNum])
