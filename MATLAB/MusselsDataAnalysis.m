@@ -6,7 +6,9 @@ format compact
 disp('Started')
 
 %Finding Necessary Files
-workingDirectory = 'WorkingRawSD\';
+workingDirectory = 'C:\EE Monterey 2014\Working Directory\';
+processedFolder = 'C:\EE Monterey 2014\ProcessedData\';
+
 files = dir(workingDirectory);
 [countSD,fileSDName] = checkForFile(files,'SD',false);
 [countERR,fileErrorLogName] = checkForFile(files,'ERRORLOG.TXT',false);
@@ -106,7 +108,7 @@ catch
 end
 
 %Create folder for processed data
-processedFolder = 'C:\Users\Student\Documents\EE Monterey 2014 MATLAB\ProcessedData\';
+%processedFolder
 dateSDNum = strcat(dateCollected,'-',fileSDName(1:4));
 concatFileName = strcat(dateSDNum,'.m');
 subFolder = strcat(processedFolder,dateSDNum,'\');
@@ -187,7 +189,16 @@ disp('Thermistor calculations finished')
 
 %Calculating Distance from Hall Effect Sensor
 disp('Hall effect calculations started')
-zeroPoint = mean(magnetLogData(end-60:end,9));
+%Accounting for orientation of the magnet
+noMagnetDigitalVoltage = 524; %could be calculated for each using starting non-magnet data
+if (mean(hallEffectData) < noMagnetDigitalVoltage)
+    fprintf('Magnet is in standard orientation\n')
+else
+    fprintf('Magnet is in flipped orientation\n')
+end
+hallEffectData = noMagnetDigitalVoltage - abs(hallEffectData - noMagnetDigitalVoltage);
+magnetLogData = noMagnetDigitalVoltage - abs(magnetLogData - noMagnetDigitalVoltage);
+zeroPoint = mean(magnetLogData(end-60:end,9)); 
 hallEffectDistance = hallVoltsToDist(hallEffectData,zeroPoint);
 disp('Hall effect calculations finished')
 
@@ -197,6 +208,7 @@ disp('Hall effect calculations finished')
 %%%%program
 
 %Convert Timestamps to proper format for datenum and datetick
+fprintf('Started converting timestamps\n')
 timeTicks = zeros(length(timestamps(:,1)),21);
 timeTicks(:,1:17) = timestamps;
 for i=1:length(timeTicks(:,1))
@@ -226,7 +238,7 @@ axis([-inf, inf, 5, 45])
 %Plotting Hall Effect, Gape data
 subplot(3,1,2)
 hold on;
-plot(x_axis, hallEffectDistance,'ro','MarkerSize',1)
+plot(x_axis, hallEffectDistance,'r')
 title('Hall Effect','FontWeight','bold','FontSize',15);ylabel('Gape, mm');
 axis([-inf, inf, -1,6])
 
@@ -265,4 +277,7 @@ subplot(3,1,3)
 datetickzoom('x','HH:MM:SS.FFF')
 
 %Save the plot alongside the concatenated data file
+fprintf('Saving figure\n')
 savefig(fHandle,[subFolder,dateSDNum])
+
+fprintf('Done\n')
